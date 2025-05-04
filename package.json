@@ -11,6 +11,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.18.5",
     "concurrently": "^9.1.2",
     "next": "15.3.1",
     "react": "^19.0.0",
