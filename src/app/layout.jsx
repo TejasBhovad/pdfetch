@@ -32,13 +32,13 @@ export default function RootLayout({ children }) {
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
           <header className="flex justify-end items-center p-4 gap-4 w-full h-16 absolute">
-            {/* <SignedOut>
-              <SignInButton />
-              <SignUpButton />
+            <SignedOut>
+              {/* <SignInButton />
+              <SignUpButton /> */}
             </SignedOut>
             <SignedIn>
               <UserButton />
-            </SignedIn> */}
+            </SignedIn>
           </header>
           <main className="w-full h-full pt-16">{children}</main>
         </body>
