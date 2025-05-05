@@ -11,46 +11,119 @@ from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
 import json
 from . import crud, models
-# Process PDF function (unchanged)
+
+# Process PDF function (fixed to handle download errors properly)
 def process_pdf_file(file_url):
     """
     Download a PDF from a URL and extract its text
     """
+    temp_file_path = None
     try:
-        # Download the file
+        # Download the file with proper headers
         print(f"Downloading PDF from {file_url}")
-        response = requests.get(file_url)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        response = requests.get(file_url, headers=headers, stream=True)
         response.raise_for_status()
+        
+        # Check content type to ensure it's actually a PDF
+        content_type = response.headers.get('Content-Type', '')
+        if 'application/pdf' not in content_type.lower() and 'binary/octet-stream' not in content_type.lower():
+            print(f"Warning: Content type '{content_type}' may not be a PDF")
+            # Validate the first few bytes to check for PDF signature
+            pdf_signature = response.content[:5]
+            if not pdf_signature.startswith(b'%PDF-'):
+                print(f"Error: Not a valid PDF file. Content starts with: {pdf_signature}")
+                return None
         
         # Save to a temporary file
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
             temp_file_path = temp_file.name
-            temp_file.write(response.content)
+            # Write content in chunks to handle large files
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    temp_file.write(chunk)
         
-        # Extract text
-        print(f"Extracting text from {temp_file_path}")
-        loader = PyPDFLoader(temp_file_path)
-        documents = loader.load()
+        # Check file size
+        file_size = os.path.getsize(temp_file_path)
+        if file_size == 0:
+            print("Error: Downloaded file is empty")
+            os.unlink(temp_file_path)
+            return None
         
-        # Clean up the temp file
-        os.unlink(temp_file_path)
+        print(f"Successfully downloaded PDF ({file_size} bytes) to {temp_file_path}")
         
-        return documents
-    except Exception as e:
-        print(f"Error processing PDF: {str(e)}")
-        if 'temp_file_path' in locals():
+        # Extract text with error handling
+        try:
+            print(f"Extracting text from {temp_file_path}")
+            loader = PyPDFLoader(temp_file_path)
+            documents = loader.load()
+            
+            if not documents:
+                print("Warning: No text extracted from PDF")
+                
+            # Clean up the temp file
+            os.unlink(temp_file_path)
+            
+            return documents
+        except Exception as e:
+            print(f"Error extracting text from PDF: {str(e)}")
+            # Try an alternative approach for problematic PDFs
+            try:
+                # If PyPDFLoader fails, try using a different PDF extraction method
+                # For example, using pdfplumber as a fallback
+                import pdfplumber
+                
+                extracted_text = []
+                with pdfplumber.open(temp_file_path) as pdf:
+                    for i, page in enumerate(pdf.pages):
+                        text = page.extract_text() or ""
+                        if text.strip():
+                            from langchain.schema import Document
+                            extracted_text.append(Document(
+                                page_content=text,
+                                metadata={"page": i + 1, "source": file_url}
+                            ))
+                
+                if extracted_text:
+                    print(f"Successfully extracted text using fallback method")
+                    return extracted_text
+                else:
+                    print("Failed to extract text with fallback method")
+                    return None
+            except Exception as fallback_error:
+                print(f"Fallback extraction also failed: {str(fallback_error)}")
+                return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading PDF: {str(e)}")
+        return None
+    finally:
+        # Ensure temp file is always deleted
+        if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.unlink(temp_file_path)
-            except:
-                pass
-        return None
+                print(f"Cleaned up temporary file: {temp_file_path}")
+            except Exception as cleanup_error:
+                print(f"Error during cleanup: {str(cleanup_error)}")
 
-# Create vector store function (unchanged)
+# Create vector store function (improved error handling)
 def create_vector_store(documents, document_id, db):
     """
     Create a vector store from documents and store in the database
     """
     try:
+        if not documents:
+            print(f"Warning: No documents provided for document_id {document_id}")
+            crud.create_document_chunk(
+                db=db,
+                document_id=document_id,
+                chunk_index=0,
+                content="No content could be extracted from this document.",
+                embedding=None
+            )
+            return None
+            
         print(f"Creating vector store for document {document_id} with {len(documents)} pages")
         
         # Split text into chunks
@@ -78,15 +151,14 @@ def create_vector_store(documents, document_id, db):
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
         
-        # Create vector store
-        vectorstore = FAISS.from_documents(chunks, embeddings)
-        
-        # Store chunks in database
+        # Store chunks in database first - even if vector store creation fails
         print(f"Storing {len(chunks)} chunks in database for document {document_id}")
         for i, chunk in enumerate(chunks):
             try:
+                # Generate embedding for this chunk
                 embedding = embeddings.embed_query(chunk.page_content)
                 
+                # Store chunk and embedding in database
                 crud.create_document_chunk(
                     db=db,
                     document_id=document_id,
@@ -97,10 +169,31 @@ def create_vector_store(documents, document_id, db):
                 print(f"Successfully saved chunk {i} to database")
             except Exception as chunk_error:
                 print(f"Error saving chunk {i}: {str(chunk_error)}")
+                # Store the chunk without embedding if embedding fails
+                try:
+                    crud.create_document_chunk(
+                        db=db,
+                        document_id=document_id,
+                        chunk_index=i,
+                        content=chunk.page_content,
+                        embedding=None
+                    )
+                    print(f"Saved chunk {i} without embedding")
+                except Exception as fallback_error:
+                    print(f"Failed to save chunk {i} even without embedding: {str(fallback_error)}")
         
-        return vectorstore
+        # Create vector store after database storage is complete
+        try:
+            vectorstore = FAISS.from_documents(chunks, embeddings)
+            print(f"Successfully created vector store for document {document_id}")
+            return vectorstore
+        except Exception as vs_error:
+            print(f"Error creating vector store: {str(vs_error)}")
+            # Even if vector store creation fails, we've already stored the chunks
+            return None
+            
     except Exception as e:
-        print(f"Error creating vector store: {str(e)}")
+        print(f"Error in create_vector_store: {str(e)}")
         try:
             crud.create_document_chunk(
                 db=db,
@@ -114,11 +207,16 @@ def create_vector_store(documents, document_id, db):
             print(f"Failed to create error chunk: {str(db_error)}")
         return None
 
+# Rest of the file remains the same
 def answer_question(question, chunks):
     """
     Find relevant information in document chunks and generate a coherent answer using HuggingFace
     """
     try:
+        # Handle empty chunks case
+        if not chunks:
+            return "No document content is available to answer this question."
+            
         # Convert chunks to documents
         documents = []
         for chunk in chunks:
@@ -190,85 +288,6 @@ def answer_question(question, chunks):
         # Run chain
         response = chain.invoke({"context": context, "question": question})
         
-        # Return the generated answer
-        return response["text"].strip()
-        
-    except Exception as e:
-        print(f"Error generating answer: {str(e)}")
-        return f"Sorry, I encountered an error: {str(e)}"
-    """
-    Find relevant information in document chunks and generate a coherent answer with an LLM
-    """
-    try:
-        # Step 1: Convert chunks to documents
-        documents = []
-        for chunk in chunks:
-            content = chunk.content if hasattr(chunk, 'content') else str(chunk)
-            documents.append({
-                "page_content": content,
-                "metadata": {"chunk_id": chunk.id if hasattr(chunk, 'id') else 0}
-            })
-        
-        # Step 2: Create embeddings
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
-        
-        # Step 3: Create vector store
-        vectorstore = FAISS.from_texts(
-            [doc["page_content"] for doc in documents],
-            embeddings,
-            metadatas=[doc["metadata"] for doc in documents]
-        )
-        
-        # Step 4: Perform similarity search
-        docs = vectorstore.similarity_search(question, k=3)
-        
-        if not docs:
-            return "I couldn't find any relevant information in the document to answer your question."
-        
-        # Step 5: Format context from retrieved documents
-        context = "\n\n".join([f"Document {i+1}:\n{doc.page_content}" for i, doc in enumerate(docs)])
-        
-        # Step 6: Check if OpenAI API key is available
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        if not openai_api_key:
-            # Fallback to returning chunks if no API key
-            response = f"Here's what I found in the document related to '{question}':\n\n"
-            for i, doc in enumerate(docs, 1):
-                response += f"Excerpt {i}:\n{doc.page_content}\n\n"
-            
-            response += "(Note: To get an AI-generated answer instead of raw excerpts, please configure your OpenAI API key.)"
-            return response
-        
-        # Step 7: Create prompt template
-        prompt_template = """
-        You are an assistant that helps users understand document content.
-        
-        Below are excerpts from a document that are relevant to the user's question.
-        
-        {context}
-        
-        User's question: {question}
-        
-        Based only on the information provided in these excerpts, give a concise, helpful answer.
-        If the information needed isn't contained in the excerpts, say "I don't have enough information to answer that question."
-        """
-        
-        prompt = PromptTemplate(
-            template=prompt_template,
-            input_variables=["context", "question"]
-        )
-        
-        # Step 8: Create LLM
-        llm = OpenAI(temperature=0.2, model_name="gpt-3.5-turbo-instruct", max_tokens=300)
-        
-        # Step 9: Create chain
-        chain = LLMChain(llm=llm, prompt=prompt)
-        
-        # Step 10: Run chain
-        response = chain.invoke({"context": context, "question": question})
-
         # Return the generated answer
         return response["text"].strip()
         

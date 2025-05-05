@@ -1,47 +1,72 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useApiClient } from "@/utils/api";
 import Link from "next/link";
+import { useUser } from "@clerk/nextjs";
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [fetchAttempted, setFetchAttempted] = useState(false);
+
+  // Check auth state
+  const { isLoaded: authLoaded, isSignedIn } = useUser();
 
   // Get our API client hook
-  const apiClientPromise = useApiClient();
+  const apiClient = useApiClient();
+
+  // Use useCallback to prevent recreation of this function on every render
+  const fetchStats = useCallback(async () => {
+    if (!authLoaded || fetchAttempted) return;
+
+    try {
+      setLoading(true);
+      setFetchAttempted(true);
+      const data = await apiClient.getUserStats();
+      setStats(data);
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+      setError("Failed to load dashboard statistics");
+    } finally {
+      setLoading(false);
+    }
+  }, [apiClient, authLoaded, fetchAttempted]);
 
   useEffect(() => {
-    async function fetchStats() {
-      try {
-        setLoading(true);
-        const apiClient = await apiClientPromise;
-        const response = await apiClient.getStats();
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch stats");
-        }
-
-        const data = await response.json();
-        setStats(data);
-      } catch (err) {
-        console.error("Error fetching stats:", err);
-        setError("Failed to load dashboard statistics");
-      } finally {
-        setLoading(false);
-      }
+    if (authLoaded && !fetchAttempted) {
+      fetchStats();
     }
+  }, [fetchStats, authLoaded, fetchAttempted]);
 
-    fetchStats();
-  }, [apiClientPromise]);
-
-  if (loading) {
-    return <div className="flex justify-center p-8">Loading dashboard...</div>;
+  // Show loading indicator only during initial load or when actively fetching
+  if (!authLoaded || (loading && !stats && !error)) {
+    return (
+      <div className="flex justify-center p-8">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="p-8 text-red-500">{error}</div>;
+    return (
+      <div className="p-8">
+        <div className="bg-red-50 border border-red-200 p-4 rounded-md text-red-700 mb-4">
+          {error}
+        </div>
+        <button
+          onClick={() => {
+            setFetchAttempted(false);
+            setError(null);
+            fetchStats();
+          }}
+          className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+        >
+          Try Again
+        </button>
+      </div>
+    );
   }
 
   return (

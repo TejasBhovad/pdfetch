@@ -4,6 +4,7 @@ from . import models, schemas
 from fastapi import HTTPException
 import json
 
+from sqlalchemy import func 
 # User operations
 def create_user(db: Session, user_data: dict):
     """Create a new user with Clerk ID"""
@@ -153,42 +154,46 @@ def get_answer_by_question(db: Session, question_id: int):
     """Get the answer for a specific question"""
     return db.query(models.Answer).filter(models.Answer.question_id == question_id).first()
 
-# Statistics operations
-def get_user_stats(db: Session, clerk_id: str):
-    """Get statistics for a user identified by Clerk ID"""
-    try:
-        # Count documents
-        document_count = db.query(models.Document).filter(
-            models.Document.user_id == clerk_id
-        ).count()
-        
-        # Count questions
-        question_count = db.query(models.Question).filter(
-            models.Question.user_id == clerk_id
-        ).count()
-        
-        # Sum document sizes
-        result = db.query(db.func.sum(models.Document.file_size)).filter(
-            models.Document.user_id == clerk_id
-        ).scalar()
-        
-        total_storage = result or 0
-        
-        # Convert to appropriate unit
-        if total_storage < 1024:
-            storage_unit = "Bytes"
-        elif total_storage < 1024 * 1024:
-            total_storage = total_storage / 1024
-            storage_unit = "KB"
-        else:
-            total_storage = total_storage / (1024 * 1024)
-            storage_unit = "MB"
-            
-        return {
-            "documentCount": document_count,
-            "questionCount": question_count,
-            "totalStorageUsed": round(total_storage, 2),
-            "storageUnit": storage_unit
-        }
-    except SQLAlchemyError as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+# Then fix the get_user_stats function:
+def get_user_stats(db, user_id):
+    """Get statistics for a user"""
+    # Count documents
+    document_count = db.query(models.Document).filter(
+        models.Document.user_id == user_id
+    ).count()
+    
+    # Count questions
+    question_count = db.query(models.Question).join(
+        models.Document, models.Question.document_id == models.Document.id
+    ).filter(
+        models.Document.user_id == user_id
+    ).count()
+    
+    # Sum file sizes
+    # Fix: Use func from sqlalchemy instead of db.func
+    result = db.query(func.sum(models.Document.file_size)).filter(
+        models.Document.user_id == user_id
+    ).scalar()
+    
+    total_storage_used = result or 0
+    
+    # Convert bytes to appropriate unit
+    storage_unit = "B"
+    if total_storage_used > 1024:
+        total_storage_used /= 1024
+        storage_unit = "KB"
+    
+    if total_storage_used > 1024:
+        total_storage_used /= 1024
+        storage_unit = "MB"
+    
+    if total_storage_used > 1024:
+        total_storage_used /= 1024
+        storage_unit = "GB"
+    
+    return {
+        "documentCount": document_count,
+        "questionCount": question_count,
+        "totalStorageUsed": round(total_storage_used, 2),
+        "storageUnit": storage_unit
+    }
