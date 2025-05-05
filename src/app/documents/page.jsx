@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useApiClient } from "@/utils/api";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
+import { FileText, Plus, Trash2, ExternalLink, Loader2 } from "lucide-react";
 
 export default function Documents() {
   const [documents, setDocuments] = useState([]);
@@ -11,10 +12,8 @@ export default function Documents() {
   const [error, setError] = useState(null);
   const [fetchAttempted, setFetchAttempted] = useState(false);
 
-  // Check auth state
   const { isLoaded: authLoaded } = useUser();
 
-  // Get our API client hook
   const apiClient = useApiClient();
 
   const fetchDocuments = useCallback(async () => {
@@ -24,7 +23,6 @@ export default function Documents() {
       setLoading(true);
       setFetchAttempted(true);
 
-      // Call getDocuments directly - it should already return JSON data
       const data = await apiClient.getDocuments();
       setDocuments(data);
     } catch (err) {
@@ -59,16 +57,16 @@ export default function Documents() {
 
   if (!authLoaded || (loading && !documents.length && !error)) {
     return (
-      <div className="flex justify-center p-8">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex justify-center items-center p-8 h-[50vh]">
+        <Loader2 className="h-12 w-12 text-green-500 animate-spin" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-8">
-        <div className="bg-red-50 border border-red-200 p-4 rounded-md text-red-700 mb-4">
+      <div className="p-8 max-w-4xl mx-auto">
+        <div className="bg-red-50 border border-red-100 p-4 rounded-lg text-red-600 mb-4 shadow-sm">
           {error}
         </div>
         <button
@@ -77,7 +75,7 @@ export default function Documents() {
             setError(null);
             fetchDocuments();
           }}
-          className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+          className="px-4 py-2 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors shadow-sm"
         >
           Try Again
         </button>
@@ -87,27 +85,35 @@ export default function Documents() {
 
   if (documents.length === 0) {
     return (
-      <div className="text-center p-8">
-        <h1 className="text-2xl font-bold mb-4">Your Documents</h1>
-        <p className="mb-6">You haven't uploaded any documents yet.</p>
-        <Link
-          href="/upload"
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-        >
-          Upload Your First Document
-        </Link>
+      <div className="text-center p-8 max-w-4xl mx-auto">
+        <h1 className="text-2xl font-semibold mb-4 text-gray-800">
+          Your Documents
+        </h1>
+        <div className="bg-white p-8 rounded-lg shadow-sm border border-gray-100">
+          <p className="mb-6 text-gray-600">
+            You haven't uploaded any documents yet.
+          </p>
+          <Link
+            href="/upload"
+            className="px-5 py-2.5 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors inline-block shadow-sm flex items-center gap-2 justify-center mx-auto w-fit"
+          >
+            <Plus className="h-5 w-5" />
+            Upload Your First Document
+          </Link>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Your Documents</h1>
+    <div className="max-w-6xl mx-auto p-6">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-2xl font-semibold text-gray-800">Your Documents</h1>
         <Link
           href="/upload"
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          className="px-5 py-2.5 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors shadow-sm flex items-center gap-2"
         >
+          <Plus className="h-5 w-5" />
           Upload New Document
         </Link>
       </div>
@@ -116,28 +122,38 @@ export default function Documents() {
         {documents.map((doc) => (
           <div
             key={doc.id}
-            className="bg-white dark:bg-gray-800 p-5 rounded-lg shadow"
+            className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
           >
-            <h3 className="font-medium text-lg mb-2 truncate">{doc.title}</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-              {new Date(doc.created_at).toLocaleDateString()}
-            </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              {(doc.file_size / (1024 * 1024)).toFixed(2)} MB
-            </p>
+            <div className="flex items-start gap-3 mb-3">
+              <div className="p-2 bg-green-50 rounded-md">
+                <FileText className="h-5 w-5 text-green-500" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-medium text-lg text-gray-800 truncate">
+                  {doc.title}
+                </h3>
+                <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                  <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                  <span>•</span>
+                  <span>{(doc.file_size / (1024 * 1024)).toFixed(2)} MB</span>
+                </div>
+              </div>
+            </div>
 
-            <div className="flex justify-between mt-4">
+            <div className="flex justify-between mt-6 gap-3">
               <Link
                 href={`/documents/${doc.id}`}
-                className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 text-sm"
+                className="flex-1 px-4 py-2 bg-gray-50 text-gray-700 rounded-md hover:bg-gray-100 text-sm transition-colors text-center font-medium flex items-center justify-center gap-2"
               >
+                <ExternalLink className="h-4 w-4" />
                 View & Ask
               </Link>
               <button
                 onClick={() => handleDelete(doc.id)}
-                className="px-3 py-1.5 bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-200 rounded hover:bg-red-200 dark:hover:bg-red-800 text-sm"
+                className="px-4 py-2 text-red-500 rounded-md hover:bg-red-50 text-sm transition-colors"
+                aria-label="Delete document"
               >
-                Delete
+                <Trash2 className="h-4 w-4" />
               </button>
             </div>
           </div>

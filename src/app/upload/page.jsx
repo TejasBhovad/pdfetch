@@ -3,6 +3,15 @@
 import { useState } from "react";
 import { useApiClient } from "@/utils/api";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  Upload as UploadIcon,
+  FileText,
+  X,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
 
 export default function Upload() {
   const router = useRouter();
@@ -98,79 +107,116 @@ export default function Upload() {
   };
 
   return (
-    <div className="max-w-xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Upload Document</h1>
+    <div className="max-w-xl mx-auto p-6">
+      <div className="mb-8 flex justify-between items-center">
+        <h1 className="text-2xl font-semibold text-gray-800">
+          Upload Document
+        </h1>
+        <Link
+          href="/documents"
+          className="text-green-500 hover:text-green-600 transition-colors flex items-center gap-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Documents
+        </Link>
+      </div>
 
-      <form onSubmit={handleUpload} className="space-y-6">
-        <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-8 text-center">
-          <input
-            type="file"
-            id="file-upload"
-            onChange={handleFileChange}
-            className="hidden"
-            accept="application/pdf"
-            disabled={uploading}
-          />
-          <label
-            htmlFor="file-upload"
-            className="cursor-pointer flex flex-col items-center justify-center"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-12 w-12 text-gray-400 mb-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+        <form onSubmit={handleUpload} className="space-y-6">
+          <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center">
+            <input
+              type="file"
+              id="file-upload"
+              onChange={handleFileChange}
+              className="hidden"
+              accept="application/pdf"
+              disabled={uploading}
+            />
+            <label
+              htmlFor="file-upload"
+              className="cursor-pointer flex flex-col items-center justify-center"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-              />
-            </svg>
-            <p className="mb-2 text-sm font-medium">
-              Click to select a PDF file or drag and drop
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Only PDF files are supported (max 10MB)
-            </p>
-          </label>
+              <div className="p-3 bg-green-50 rounded-full mb-4">
+                <UploadIcon className="h-10 w-10 text-green-500" />
+              </div>
+              <p className="mb-2 text-gray-700 font-medium">
+                Click to select a PDF file or drag and drop
+              </p>
+              <p className="text-sm text-gray-500">
+                Only PDF files are supported (max 10MB)
+              </p>
+            </label>
 
-          {file && (
-            <div className="mt-4 p-2 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-between">
-              <span className="text-sm truncate max-w-xs">{file.name}</span>
-              <span className="text-xs text-gray-500">
-                {(file.size / (1024 * 1024)).toFixed(2)} MB
-              </span>
+            {file && (
+              <div className="mt-5 p-3 bg-gray-50 rounded-lg flex items-center gap-3">
+                <div className="p-2 bg-green-50 rounded-md">
+                  <FileText className="w-5 h-5 text-green-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700 truncate">
+                    {file.name}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {(file.size / (1024 * 1024)).toFixed(2)} MB
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                  onClick={() => setFile(null)}
+                  disabled={uploading}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <div className="text-red-600 text-sm p-4 bg-red-50 rounded-lg border border-red-100 flex items-start gap-3">
+              <AlertCircle className="w-4 h-4 text-red-500 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
-        </div>
 
-        {error && <div className="text-red-500 text-sm">{error}</div>}
-
-        {uploading && (
-          <div className="space-y-2">
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-              <div
-                className="bg-blue-600 h-2.5 rounded-full"
-                style={{ width: `${uploadProgress}%` }}
-              ></div>
+          {uploading && (
+            <div className="space-y-2">
+              <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="bg-green-500 h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <p className="text-gray-600">
+                  {uploadProgress === 100
+                    ? "Upload complete! Redirecting..."
+                    : `Uploading...`}
+                </p>
+                <p className="text-gray-600 font-medium">{uploadProgress}%</p>
+              </div>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {uploadProgress === 100 ? "Upload complete!" : "Uploading..."}
-            </p>
-          </div>
-        )}
+          )}
 
-        <button
-          type="submit"
-          className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-          disabled={uploading || !file}
-        >
-          {uploading ? "Uploading..." : "Upload Document"}
-        </button>
-      </form>
+          <button
+            type="submit"
+            className="w-full px-5 py-2.5 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:opacity-50 transition-colors font-medium shadow-sm"
+            disabled={uploading || !file}
+          >
+            {uploading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 text-white animate-spin" />
+                Processing...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <UploadIcon className="h-4 w-4" />
+                Upload Document
+              </span>
+            )}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

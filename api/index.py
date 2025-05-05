@@ -54,20 +54,16 @@ async def get_user_id(request: Request, db: Session = Depends(get_db)):
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
-            
-            # Extract the actual user ID portion from the JWT
-            # We'll extract just the "sub" claim value which is the stable user ID
-            # instead of using the whole token as the clerk_id
-            
+     
             try:
                 # Split on periods to get the payload section of the JWT
                 payload_b64 = token.split('.')[1]
                 
-                # Add padding if needed
+                 
                 padding = '=' * (4 - len(payload_b64) % 4) if len(payload_b64) % 4 != 0 else ''
                 payload_b64 += padding
                 
-                # Decode base64 payload
+         
                 import base64
                 import json
                 payload_json = base64.b64decode(payload_b64).decode('utf-8')
@@ -77,21 +73,20 @@ async def get_user_id(request: Request, db: Session = Depends(get_db)):
                 clerk_id = payload.get('sub')
                 
                 if not clerk_id:
-                    # If we can't extract sub, fall back to first part of token
+                
                     clerk_id = token.split("|")[0] if "|" in token else token
             except Exception as e:
-                # If parsing fails, fall back to old method
+              
                 print(f"Error parsing JWT: {e}")
                 clerk_id = token.split("|")[0] if "|" in token else token
             
-            # Ensure user exists in our database
+ 
             user = crud.get_user_by_clerk_id(db, clerk_id)
-            if not user:
-                # Create the user
+            if not user: 
                 try:
                     user = crud.create_user(db, {
                         "clerk_id": clerk_id,
-                        "email": f"{clerk_id}@example.com",  # Placeholder
+                        "email": f"{clerk_id}@example.com",  
                         "username": "User"
                     })
                 except Exception as user_err:
@@ -103,7 +98,7 @@ async def get_user_id(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"Error getting user from token: {str(e)}")
     
-    # For testing, use x-user-id header or default to test user
+   
     user_id = request.headers.get("x-user-id", default_user_id)
     
     # Ensure user exists
@@ -129,8 +124,6 @@ async def get_user_id(request: Request, db: Session = Depends(get_db)):
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ")[1]
             
-            # Simply use the token as clerk_id for now
-            # In production, you'd properly validate this token
             clerk_id = token.split("|")[0] if "|" in token else token
             
             # Ensure user exists in our database
@@ -152,10 +145,10 @@ async def get_user_id(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"Error getting user from token: {str(e)}")
     
-    # For testing, use x-user-id header or default to test user
+   
     user_id = request.headers.get("x-user-id", default_user_id)
     
-    # Ensure user exists
+ 
     try:
         user = crud.get_user_by_clerk_id(db, user_id)
         if not user:
@@ -288,10 +281,10 @@ async def upload_file_via_uploadthing(
             "fileType": file.content_type,
         }
         
-        # Use the user's clerk_id
+   
         document = crud.create_document(db, upload_result, current_user_id)
         
-        # Process PDF in background if it's a PDF file
+        # Process PDF in background 
         if file.content_type == "application/pdf" and background_tasks:
             background_tasks.add_task(
                 process_pdf_and_store, 
@@ -299,8 +292,7 @@ async def upload_file_via_uploadthing(
                 file_data.get("fileUrl"), 
                 db
             )
-
-        # Return the file information to the frontend
+ 
         return {
             "success": True,
             "documentId": document.id,
@@ -335,31 +327,30 @@ async def process_pdf_and_store(document_id: int, file_url: str, db: Session):
             print(f"Document {document_id} not found")
             return
         
-        # Verify the file URL format is correct
+     
         if not file_url.startswith('http'):
             print(f"Warning: Invalid file URL format: {file_url}")
-            # Check if there's an alternate URL field that might work
+         
             alternate_urls = [document.file_url]
             
-            # Some services provide alternative URL formats
+         
             if hasattr(document, 'file_key') and document.file_key:
-                # Try generating an alternate URL format based on the key
+           
                 if 'utfs.io' in file_url:
                     alternate_urls.append(f"https://utfs.io/f/{document.file_key}")
             
-            # Try alternate URLs if available
+            
             for alt_url in alternate_urls:
                 if alt_url and alt_url.startswith('http') and alt_url != file_url:
                     print(f"Trying alternate URL: {alt_url}")
                     file_url = alt_url
                     break
-        
-        # Extract text from PDF with improved error handling
+         
         pdf_text = process_pdf_file(file_url)
         
         if not pdf_text:
             print(f"Failed to extract text from PDF (document_id: {document_id})")
-            # Store an error chunk to indicate processing failed
+ 
             crud.create_document_chunk(
                 db=db,
                 document_id=document_id,
@@ -369,7 +360,7 @@ async def process_pdf_and_store(document_id: int, file_url: str, db: Session):
             )
             return
             
-        # Create embeddings and store chunks
+   
         vector_store = create_vector_store(pdf_text, document_id, db)
         
         if vector_store:
@@ -379,7 +370,7 @@ async def process_pdf_and_store(document_id: int, file_url: str, db: Session):
             
     except Exception as e:
         print(f"Error processing PDF (document_id: {document_id}): {str(e)}")
-        # Ensure we at least store an error message in the database
+        
         try:
             crud.create_document_chunk(
                 db=db,
@@ -412,23 +403,14 @@ async def get_document(
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    # For development, temporarily disable user access check
-    # In production, uncomment this check
-    # if document.user_id != current_user_id:
-    #     raise HTTPException(status_code=403, detail="Not authorized to access this document")
-    
+ 
     print(f"Serving document {document_id} to user {current_user_id}, document owner: {document.user_id}")
     return document
     """Get a single document by ID"""
     document = crud.get_document(db, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    
-    # For development, temporarily disable user access check
-    # In production, uncomment this check
-    # if document.user_id != current_user_id:
-    #     raise HTTPException(status_code=403, detail="Not authorized to access this document")
-    
+ 
     print(f"Serving document {document_id} to user {current_user_id}, document owner: {document.user_id}")
     return document
 
@@ -436,8 +418,7 @@ async def get_document(
     document = crud.get_document(db, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    # if document.user_id != current_user_id:
-    #     raise HTTPException(status_code=403, detail="Not authorized to access this document")
+ 
     return document
 
  
@@ -445,11 +426,7 @@ async def get_document(
     document = crud.get_document(db, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    
-    # # Check if user has access to document
-    # if document.user_id != current_user_id:
-    #     raise HTTPException(status_code=403, detail="Not authorized to access this document")
-    
+ 
     return document
 @app.post("/api/ask", response_model=schemas.AskResponse)
 async def ask_question(
@@ -463,12 +440,7 @@ async def ask_question(
     document = crud.get_document(db, request.document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    
-    # # Check if user has access to document
-    # if document.user_id != current_user_id:
-    #     raise HTTPException(status_code=403, detail="Not authorized to access this document")
-    
-    # Create question
+ 
     question = crud.create_question(db, {
         "content": request.content,
         "document_id": request.document_id
@@ -483,8 +455,7 @@ async def ask_question(
         db
     )
     
-    # Return immediately with empty answer
-    # The frontend will poll for the answer
+ 
     return {
         "success": True,
         "questionId": question.id,
@@ -510,12 +481,25 @@ async def process_answer(question_id: int, question_content: str, document_id: i
         
     except Exception as e:
         print(f"Error generating answer: {str(e)}")
-        # Create error answer
+ 
         crud.create_answer(db, {
             "content": f"Sorry, I encountered an error: {str(e)}",
             "question_id": question_id
         })
-
+@app.delete("/api/documents/{document_id}")
+async def delete_document_endpoint(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user_id: str = Depends(get_user_id)
+):
+    """Delete a document if it belongs to the current user"""
+    success = crud.delete_document(db, document_id, current_user_id)
+    if not success:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found or you don't have permission to delete it"
+        )
+    return {"message": "Document deleted successfully"}
 @app.get("/api/questions/{document_id}", response_model=List[schemas.QuestionWithAnswer])
 async def get_questions(
     document_id: int,
@@ -528,11 +512,7 @@ async def get_questions(
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    # Check if user has access to document
-    # if document.user_id != current_user_id:
-    #     raise HTTPException(status_code=403, detail="Not authorized to access this document")
-    
-    # Get questions with answers
+    # Get questions for the document
     questions = crud.get_document_questions(db, document_id)
     
     # For each question, get its answer

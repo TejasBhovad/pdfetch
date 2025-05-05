@@ -11,13 +11,9 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [fetchAttempted, setFetchAttempted] = useState(false);
 
-  // Check auth state
   const { isLoaded: authLoaded, isSignedIn } = useUser();
 
-  // Get our API client hook
   const apiClient = useApiClient();
-
-  // Use useCallback to prevent recreation of this function on every render
   const fetchStats = useCallback(async () => {
     if (!authLoaded || fetchAttempted) return;
 
@@ -40,7 +36,6 @@ export default function Dashboard() {
     }
   }, [fetchStats, authLoaded, fetchAttempted]);
 
-  // Show loading indicator only during initial load or when actively fetching
   if (!authLoaded || (loading && !stats && !error)) {
     return (
       <div className="flex justify-center p-8">
@@ -51,7 +46,7 @@ export default function Dashboard() {
 
   if (error) {
     return (
-      <div className="p-8">
+      <div className="p-8 max-w-4xl mx-auto">
         <div className="bg-red-50 border border-red-200 p-4 rounded-md text-red-700 mb-4">
           {error}
         </div>
@@ -61,7 +56,7 @@ export default function Dashboard() {
             setError(null);
             fetchStats();
           }}
-          className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
           Try Again
         </button>
@@ -70,7 +65,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div>
+    <div className="max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -96,16 +91,16 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-4">
         <Link
           href="/documents"
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
           View Documents
         </Link>
         <Link
           href="/upload"
-          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
         >
           Upload New Document
         </Link>
@@ -116,7 +111,7 @@ export default function Dashboard() {
 
 function StatCard({ title, value, description, icon }) {
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-medium">{title}</h3>
         <span className="text-2xl">{icon}</span>

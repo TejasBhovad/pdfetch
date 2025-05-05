@@ -12,40 +12,34 @@ from dotenv import load_dotenv
 import json
 from . import crud, models
 
-# Process PDF function (fixed to handle download errors properly)
+ 
 def process_pdf_file(file_url):
     """
     Download a PDF from a URL and extract its text
     """
     temp_file_path = None
-    try:
-        # Download the file with proper headers
+    try: 
         print(f"Downloading PDF from {file_url}")
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
         response = requests.get(file_url, headers=headers, stream=True)
-        response.raise_for_status()
-        
-        # Check content type to ensure it's actually a PDF
+        response.raise_for_status() 
         content_type = response.headers.get('Content-Type', '')
         if 'application/pdf' not in content_type.lower() and 'binary/octet-stream' not in content_type.lower():
-            print(f"Warning: Content type '{content_type}' may not be a PDF")
-            # Validate the first few bytes to check for PDF signature
+            print(f"Warning: Content type '{content_type}' may not be a PDF") 
             pdf_signature = response.content[:5]
             if not pdf_signature.startswith(b'%PDF-'):
                 print(f"Error: Not a valid PDF file. Content starts with: {pdf_signature}")
                 return None
-        
-        # Save to a temporary file
+         
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
-            temp_file_path = temp_file.name
-            # Write content in chunks to handle large files
+            temp_file_path = temp_file.name 
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     temp_file.write(chunk)
         
-        # Check file size
+ 
         file_size = os.path.getsize(temp_file_path)
         if file_size == 0:
             print("Error: Downloaded file is empty")
@@ -53,8 +47,7 @@ def process_pdf_file(file_url):
             return None
         
         print(f"Successfully downloaded PDF ({file_size} bytes) to {temp_file_path}")
-        
-        # Extract text with error handling
+ 
         try:
             print(f"Extracting text from {temp_file_path}")
             loader = PyPDFLoader(temp_file_path)
@@ -62,17 +55,14 @@ def process_pdf_file(file_url):
             
             if not documents:
                 print("Warning: No text extracted from PDF")
-                
-            # Clean up the temp file
+  
             os.unlink(temp_file_path)
             
             return documents
         except Exception as e:
-            print(f"Error extracting text from PDF: {str(e)}")
-            # Try an alternative approach for problematic PDFs
+            print(f"Error extracting text from PDF: {str(e)}") 
             try:
-                # If PyPDFLoader fails, try using a different PDF extraction method
-                # For example, using pdfplumber as a fallback
+                 
                 import pdfplumber
                 
                 extracted_text = []
@@ -98,16 +88,14 @@ def process_pdf_file(file_url):
     except requests.exceptions.RequestException as e:
         print(f"Error downloading PDF: {str(e)}")
         return None
-    finally:
-        # Ensure temp file is always deleted
+    finally: 
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.unlink(temp_file_path)
                 print(f"Cleaned up temporary file: {temp_file_path}")
             except Exception as cleanup_error:
                 print(f"Error during cleanup: {str(cleanup_error)}")
-
-# Create vector store function (improved error handling)
+ 
 def create_vector_store(documents, document_id, db):
     """
     Create a vector store from documents and store in the database
@@ -155,10 +143,9 @@ def create_vector_store(documents, document_id, db):
         print(f"Storing {len(chunks)} chunks in database for document {document_id}")
         for i, chunk in enumerate(chunks):
             try:
-                # Generate embedding for this chunk
+ 
                 embedding = embeddings.embed_query(chunk.page_content)
-                
-                # Store chunk and embedding in database
+ 
                 crud.create_document_chunk(
                     db=db,
                     document_id=document_id,
@@ -168,8 +155,7 @@ def create_vector_store(documents, document_id, db):
                 )
                 print(f"Successfully saved chunk {i} to database")
             except Exception as chunk_error:
-                print(f"Error saving chunk {i}: {str(chunk_error)}")
-                # Store the chunk without embedding if embedding fails
+                print(f"Error saving chunk {i}: {str(chunk_error)}") 
                 try:
                     crud.create_document_chunk(
                         db=db,
@@ -181,15 +167,14 @@ def create_vector_store(documents, document_id, db):
                     print(f"Saved chunk {i} without embedding")
                 except Exception as fallback_error:
                     print(f"Failed to save chunk {i} even without embedding: {str(fallback_error)}")
-        
-        # Create vector store after database storage is complete
+         
         try:
             vectorstore = FAISS.from_documents(chunks, embeddings)
             print(f"Successfully created vector store for document {document_id}")
             return vectorstore
         except Exception as vs_error:
             print(f"Error creating vector store: {str(vs_error)}")
-            # Even if vector store creation fails, we've already stored the chunks
+          
             return None
             
     except Exception as e:
@@ -206,18 +191,17 @@ def create_vector_store(documents, document_id, db):
         except Exception as db_error:
             print(f"Failed to create error chunk: {str(db_error)}")
         return None
-
-# Rest of the file remains the same
+ 
 def answer_question(question, chunks):
     """
     Find relevant information in document chunks and generate a coherent answer using HuggingFace
     """
     try:
-        # Handle empty chunks case
+  
         if not chunks:
             return "No document content is available to answer this question."
             
-        # Convert chunks to documents
+      
         documents = []
         for chunk in chunks:
             content = chunk.content if hasattr(chunk, 'content') else str(chunk)
@@ -226,32 +210,29 @@ def answer_question(question, chunks):
                 "metadata": {"chunk_id": chunk.id if hasattr(chunk, 'id') else 0}
             })
         
-        # Create embeddings
+ 
         embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
         
-        # Create vector store
+ 
         vectorstore = FAISS.from_texts(
             [doc["page_content"] for doc in documents],
             embeddings,
             metadatas=[doc["metadata"] for doc in documents]
         )
-        
-        # Perform similarity search - use fewer chunks to avoid token limit issues
+         
         docs = vectorstore.similarity_search(question, k=2)
         
         if not docs:
             return "I couldn't find any relevant information in the document to answer your question."
         
-        # Format a shorter context to avoid token limit issues
-        # Limit each document to 250 characters to stay well under token limits
+ 
         context = "\n\n".join([f"Document {i+1}:\n{doc.page_content[:250]}..." for i, doc in enumerate(docs)])
         
-        # Check if HuggingFace API token is available
+     
         huggingface_api_token = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-        if not huggingface_api_token:
-            # Fallback to returning chunks if no API token
+        if not huggingface_api_token: 
             response = f"Here's what I found in the document related to '{question}':\n\n"
             for i, doc in enumerate(docs, 1):
                 response += f"Excerpt {i}:\n{doc.page_content}\n\n"
@@ -259,7 +240,7 @@ def answer_question(question, chunks):
             response += "(Note: To get an AI-generated answer, please configure your HUGGINGFACEHUB_API_TOKEN.)"
             return response
         
-        # Create a very short prompt to avoid token limit issues
+ 
         prompt_template = """
         Context: {context}
         
